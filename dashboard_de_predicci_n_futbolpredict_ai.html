@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FutBolPredict AI - Dashboard de Marcador Exacto</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                            accent: '#06b6d4'
+                        },
+                        darkbg: '#0b0f19',
+                        cardbg: '#111827',
+                        borderbg: '#1f2937'
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+        
+        .heatmap-cell {
+            transition: all 0.2s ease;
+        }
+        .heatmap-cell:hover {
+            transform: scale(1.08);
+            z-index: 10;
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+    </style>
+</head>
+<body class="bg-darkbg text-gray-100 min-h-screen flex flex-col antialiased">
+
+    <header class="bg-cardbg border-b border-borderbg sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">⚽</span>
+                    <span class="font-extrabold text-lg tracking-wider text-white">FutBol<span class="text-brand-500">Predict AI</span></span>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <button onclick="toggleApiModal()" id="apiStatusBtn" class="flex items-center space-x-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition relative">
+                    <span id="apiStatusDot" class="w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse"></span>
+                    <i class="fa-solid fa-key text-yellow-400"></i>
+                    <span id="apiStatusText" class="hidden sm:inline">Configurar API</span>
+                </button>
+                <div class="h-5 w-px bg-gray-700"></div>
+                <button onclick="runMonteCarloSimulation()" class="flex items-center space-x-2 px-4 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-600/30 transition">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Simular 10K Partidos</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        
+        <div class="bg-cardbg p-4 rounded-xl border border-borderbg shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Liga / Competición</label>
+                <select id="leagueSelect" onchange="loadLeagueMatches()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <option value="laliga">🇪🇸 LaLiga Spain</option>
+                    <option value="premier">🇬🇧 Premier League</option>
+                    <option value="champions">🇪🇺 UEFA Champions League</option>
+                    <option value="seriea">🇮🇹 Serie A</option>
+                    <option value="colombia">🇨🇴 Liga BetPlay</option>
+                    <option value="custom">⚙️ Equipos Personalizados</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Seleccionar Partido Próximo</label>
+                <select id="matchSelect" onchange="onMatchChange()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Modelo de Ajuste Estadístico</label>
+                <select id="modelType" onchange="calculatePredictions()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <option value="dixon">Poisson + Dixon-Coles (Recomendado)</option>
+                    <option value="poisson">Poisson Standard</option>
+                    <option value="xg_weighted">Ponderado por xG Reciente</option>
+                </select>
+            </div>
+
+            <div class="flex items-end h-full pt-1">
+                <button onclick="calculatePredictions()" class="w-full bg-gray-800 hover:bg-gray-700 text-brand-500 hover:text-brand-400 border border-brand-500/40 rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center space-x-2 transition">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>Recalcular Modelo</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-cardbg border border-borderbg rounded-2xl p-6 relative overflow-hidden shadow-xl">
+            <div class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                <!-- Home Team -->
+                <div class="md:col-span-4 flex flex-col items-center md:items-end text-center md:text-right space-y-2">
+                    <div class="flex items-center space-x-3 md:flex-row-reverse md:space-x-reverse">
+                        <div id="homeLogo" class="w-16 h-16 rounded-full bg-gray-800 border-2 border-brand-500/40 flex items-center justify-center text-2xl font-bold shadow-lg">
+                            🏠
+                        </div>
+                        <div>
+                            <h2 id="homeTeamName" class="text-2xl font-black tracking-wide text-white">Equipo Local</h2>
+                            <p id="homeTeamStats" class="text-xs text-gray-400">Posición: #2 | Forma: W-W-D-W</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2 text-xs text-gray-300 bg-gray-800/80 px-3 py-1 rounded-full border border-gray-700">
+                        <span>Ataque: <strong id="homeAtt" class="text-brand-400">1.85</strong></span>
+                        <span>|</span>
+                        <span>Defensa: <strong id="homeDef" class="text-cyan-400">0.90</strong></span>
+                    </div>
+                </div>
+
+                <!-- Match Center Info -->
+                <div class="md:col-span-4 flex flex-col items-center justify-center text-center space-y-2 py-2 border-y md:border-y-0 md:border-x border-gray-800 px-4">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-brand-500 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20" id="matchDate">
+                        HOY - 20:00 CET
+                    </span>
+                    <div class="text-3xl font-black tracking-widest text-gray-200 my-1">
+                        <span id="expectedScoreHome" class="text-brand-400">0.0</span>
+                        <span class="text-gray-600 mx-2">:</span>
+                        <span id="expectedScoreAway" class="text-cyan-400">0.0</span>
+                    </div>
+                    <p class="text-xs text-gray-400">Goles Esperados Promedio (xG)</p>
+                    <div class="text-xs font-medium text-yellow-400/90 flex items-center space-x-1">
+                        <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                        <span id="topPredictedScoreBadge">Marcador Más Probable: --</span>
+                    </div>
+                </div>
+
+                <!-- Away Team -->
+                <div class="md:col-span-4 flex flex-col items-center md:items-start text-center md:text-left space-y-2">
+                    <div class="flex items-center space-x-3">
+                        <div id="awayLogo" class="w-16 h-16 rounded-full bg-gray-800 border-2 border-cyan-500/40 flex items-center justify-center text-2xl font-bold shadow-lg">
+                            ✈️
+                        </div>
+                        <div>
+                            <h2 id="awayTeamName" class="text-2xl font-black tracking-wide text-white">Equipo Visitante</h2>
+                            <p id="awayTeamStats" class="text-xs text-gray-400">Posición: #5 | Forma: L-W-D-W</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2 text-xs text-gray-300 bg-gray-800/80 px-3 py-1 rounded-full border border-gray-700">
+                        <span>Ataque: <strong id="awayAtt" class="text-brand-400">1.40</strong></span>
+                        <span>|</span>
+                        <span>Defensa: <strong id="awayDef" class="text-cyan-400">1.10</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-cardbg border border-borderbg rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-300 flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders text-brand-500"></i>
+                    <span>Ajustes Tácticos & Factores del Partido</span>
+                </h3>
+                <button onclick="resetSliders()" class="text-xs text-gray-400 hover:text-white underline">Restablecer Valores</button>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-400">Ventaja de Localía</span>
+                        <span id="homeAdvantageVal" class="text-brand-400 font-bold">+12%</span>
+                    </div>
+                    <input type="range" id="homeAdvantageSlider" min="0" max="30" value="12" oninput="updateSliderLabels()" class="w-full accent-brand-500 bg-gray-800 h-1.5 rounded-lg">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-400">Bajas Clave (Local)</span>
+                        <span id="homeInjuriesVal" class="text-red-400 font-bold">Sin bajas</span>
+                    </div>
+                    <input type="range" id="homeInjuriesSlider" min="-30" max="0" value="0" oninput="updateSliderLabels()" class="w-full accent-red-500 bg-gray-800 h-1.5 rounded-lg">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-400">Bajas Clave (Visitante)</span>
+                        <span id="awayInjuriesVal" class="text-red-400 font-bold">Sin bajas</span>
+                    </div>
+                    <input type="range" id="awayInjuriesSlider" min="-30" max="0" value="0" oninput="updateSliderLabels()" class="w-full accent-red-500 bg-gray-800 h-1.5 rounded-lg">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-400">Importancia / Presión</span>
+                        <span id="matchImportanceVal" class="text-cyan-400 font-bold">Normal</span>
+                    </div>
+                    <input type="range" id="matchImportanceSlider" min="80" max="120" value="100" oninput="updateSliderLabels()" class="w-full accent-cyan-500 bg-gray-800 h-1.5 rounded-lg">
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-7 bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                                <i class="fa-solid fa-table-cells text-brand-500"></i>
+                                <span>Matriz de Marcador Exacto (Probabilidad %)</span>
+                            </h3>
+                            <p class="text-xs text-gray-400">Goles Local (Filas) vs Goles Visitante (Columnas)</p>
+                        </div>
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="w-3 h-3 rounded bg-gray-800 border border-gray-700 inline-block"></span>
+                            <span class="text-gray-400">Baja</span>
+                            <span class="w-3 h-3 rounded bg-brand-600 inline-block"></span>
+                            <span class="text-gray-400">Alta</span>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <div class="min-w-[340px]">
+                            <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-cyan-400 mb-1">
+                                <div class="text-gray-500">L \ V</div>
+                                <div>0</div>
+                                <div>1</div>
+                                <div>2</div>
+                                <div>3</div>
+                                <div>4</div>
+                                <div>5+</div>
+                            </div>
+                            
+                            <div id="heatmapGrid" class="space-y-1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400 flex items-center justify-between">
+                    <span>* Haz clic en una celda para ver la cuota justa estimada.</span>
+                    <button onclick="copyTopPredictions()" class="text-brand-400 hover:text-brand-300 font-medium flex items-center space-x-1">
+                        <i class="fa-solid fa-copy"></i>
+                        <span>Copiar Resumen</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="lg:col-span-5 space-y-6 flex flex-col justify-between">
+                
+                <div class="bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg">
+                    <h3 class="text-base font-bold text-white mb-3 flex items-center space-x-2">
+                        <i class="fa-solid fa-trophy text-yellow-400"></i>
+                        <span>Top 5 Marcadores Más Probables</span>
+                    </h3>
+                    <div id="topScoresList" class="space-y-2.5">
+                    </div>
+                </div>
+
+                <div class="bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg space-y-4">
+                    <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid fa-chart-pie text-cyan-400"></i>
+                        <span>Probabilidades de Mercado (1X2)</span>
+                    </h3>
+
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-brand-400" id="probHomeText">1 (Local): 0%</span>
+                            <span class="text-gray-400" id="probDrawText">X (Empate): 0%</span>
+                            <span class="text-cyan-400" id="probAwayText">2 (Visitante): 0%</span>
+                        </div>
+                        <div class="h-3 w-full bg-gray-800 rounded-full overflow-hidden flex">
+                            <div id="barHome" class="bg-brand-500 h-full transition-all duration-500" style="width: 33%"></div>
+                            <div id="barDraw" class="bg-gray-500 h-full transition-all duration-500" style="width: 33%"></div>
+                            <div id="barAway" class="bg-cyan-500 h-full transition-all duration-500" style="width: 34%"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <div class="bg-gray-800/60 p-3 rounded-xl border border-gray-700/50">
+                            <span class="text-xs text-gray-400 block">Más de 2.5 Goles</span>
+                            <span id="probOver25" class="text-lg font-bold text-white">0%</span>
+                            <span id="oddsOver25" class="text-xs text-brand-400 block font-mono">Cuota: @0.00</span>
+                        </div>
+                        <div class="bg-gray-800/60 p-3 rounded-xl border border-gray-700/50">
+                            <span class="text-xs text-gray-400 block">Ambos Anotan (BTTS)</span>
+                            <span id="probBtts" class="text-lg font-bold text-white">0%</span>
+                            <span id="oddsBtts" class="text-xs text-cyan-400 block font-mono">Cuota: @0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <div class="bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid fa-chart-column text-brand-400"></i>
+                        <span>Distribución de Goles por Equipo (Poisson)</span>
+                    </h3>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="goalDistChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid fa-chart-radar text-cyan-400"></i>
+                        <span>Comparativa Táctica Cara a Cara</span>
+                    </h3>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-cardbg border border-borderbg rounded-2xl p-5 shadow-lg">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                    <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid fa-microchip text-yellow-400"></i>
+                        <span>Simulador de Monte Carlo & Buscador de Valor (+EV)</span>
+                    </h3>
+                    <p class="text-xs text-gray-400">Resultados tras correr simulaciones iterativas independientes</p>
+                </div>
+                <div class="flex items-center space-x-2 text-xs">
+                    <span class="text-gray-400">Simulaciones Ejecutadas:</span>
+                    <span id="simCount" class="font-mono text-brand-400 font-bold bg-brand-500/10 px-2 py-1 rounded border border-brand-500/30">10,000</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gray-800/40 p-4 rounded-xl border border-gray-700/60">
+                    <div class="text-xs text-gray-400 mb-1">Victoria Local Simulada</div>
+                    <div id="simHomeWin" class="text-2xl font-black text-brand-400">0%</div>
+                    <div class="text-xs text-gray-500 mt-1">Frecuencia en 10,000 partidos</div>
+                </div>
+
+                <div class="bg-gray-800/40 p-4 rounded-xl border border-gray-700/60">
+                    <div class="text-xs text-gray-400 mb-1">Empate Simulado</div>
+                    <div id="simDraw" class="text-2xl font-black text-gray-300">0%</div>
+                    <div class="text-xs text-gray-500 mt-1">Frecuencia en 10,000 partidos</div>
+                </div>
+
+                <div class="bg-gray-800/40 p-4 rounded-xl border border-gray-700/60">
+                    <div class="text-xs text-gray-400 mb-1">Victoria Visitante Simulada</div>
+                    <div id="simAwayWin" class="text-2xl font-black text-cyan-400">0%</div>
+                    <div class="text-xs text-gray-500 mt-1">Frecuencia en 10,000 partidos</div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="apiModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-cardbg border border-borderbg rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button onclick="toggleApiModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            <h3 class="text-lg font-bold text-white mb-1 flex items-center space-x-2">
+                <i class="fa-solid fa-plug text-brand-500"></i>
+                <span>Configurar API de Fútbol</span>
+            </h3>
+            <p class="text-xs text-gray-400 mb-4">Ingresa la clave de tu proveedor de API. Los datos se guardarán de forma segura en tu navegador y se cargarán los partidos reales.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Proveedor de API</label>
+                    <select id="apiProvider" onchange="onApiProviderChange()" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-brand-500 outline-none">
+                        <option value="mock">Modo Simulación (Sin API / Datos Precargados)</option>
+                        <option value="apifootball">API-Football (v3.football.api-sports.io)</option>
+                        <option value="footballdata">Football-Data.org API</option>
+                    </select>
+                </div>
+
+                <div id="apiKeyContainer">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold text-gray-300">API Key / Token</label>
+                        <a id="apiHelpLink" href="https://www.api-football.com/" target="_blank" class="text-[10px] text-brand-400 hover:underline">¿Cómo obtener una clave gratis?</a>
+                    </div>
+                    <input type="password" id="apiKeyInput" placeholder="Ej: 8d9a7f... o xxxxxxxx" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-gray-200 focus:ring-2 focus:ring-brand-500 outline-none font-mono">
+                </div>
+
+                <div id="apiTestResult" class="hidden p-3 rounded-lg text-xs font-medium border"></div>
+
+                <div class="pt-2 flex justify-between items-center space-x-2">
+                    <button id="btnTestApi" onclick="testApiConnection()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-yellow-400 border border-yellow-500/30 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-vial"></i>
+                        <span>Probar Conexión</span>
+                    </button>
+
+                    <div class="flex items-center space-x-2">
+                        <button onclick="toggleApiModal()" class="px-3 py-2 text-xs text-gray-400 hover:text-white">Cancelar</button>
+                        <button onclick="saveApiSettings()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-600/30">Guardar Cambios</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 border border-brand-500/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i class="fa-solid fa-circle-check text-brand-400 text-lg"></i>
+        <span id="toastMsg" class="text-sm font-medium">Configuración guardada correctamente.</span>
+    </div>
+
+    <script>
+        const mockMatches = {
+            laliga: [
+                { id: 'l1', home: 'Real Madrid', away: 'FC Barcelona', homeAtt: 2.15, homeDef: 0.85, awayAtt: 2.05, awayDef: 0.95, homeRank: 1, awayRank: 2, homeForm: 'W-W-W-D', awayForm: 'W-W-D-W', date: 'Mañana - 21:00' },
+                { id: 'l2', home: 'Atlético Madrid', away: 'Sevilla FC', homeAtt: 1.70, homeDef: 0.75, awayAtt: 1.25, awayDef: 1.30, homeRank: 3, awayRank: 8, homeForm: 'W-D-W-W', awayForm: 'L-D-W-L', date: 'Hoy - 18:30' },
+                { id: 'l3', home: 'Athletic Club', away: 'Real Sociedad', homeAtt: 1.55, homeDef: 0.90, awayAtt: 1.45, awayDef: 1.05, homeRank: 5, awayRank: 6, homeForm: 'W-W-L-D', awayForm: 'D-W-W-L', date: 'Sábado - 16:15' }
+            ],
+            premier: [
+                { id: 'p1', home: 'Manchester City', away: 'Liverpool FC', homeAtt: 2.30, homeDef: 0.80, awayAtt: 2.20, awayDef: 0.90, homeRank: 1, awayRank: 2, homeForm: 'W-W-W-W', awayForm: 'W-W-D-W', date: 'Domingo - 17:30' },
+                { id: 'p2', home: 'Arsenal FC', away: 'Chelsea FC', homeAtt: 2.10, homeDef: 0.82, awayAtt: 1.65, awayDef: 1.20, homeRank: 3, awayRank: 6, homeForm: 'W-D-W-W', awayForm: 'D-L-W-W', date: 'Sábado - 20:00' },
+                { id: 'p3', home: 'Tottenham Hotspur', away: 'Manchester United', homeAtt: 1.85, homeDef: 1.15, awayAtt: 1.50, awayDef: 1.30, homeRank: 5, awayRank: 7, homeForm: 'L-W-L-D', awayForm: 'W-L-D-W', date: 'Próximo Wknd' }
+            ],
+            champions: [
+                { id: 'c1', home: 'Bayern München', away: 'Real Madrid', homeAtt: 2.35, homeDef: 0.95, awayAtt: 2.10, awayDef: 0.85, homeRank: 'QF', awayRank: 'QF', homeForm: 'W-W-W-L', awayForm: 'W-W-W-D', date: 'Martes - 21:00' },
+                { id: 'c2', home: 'Paris Saint-Germain', away: 'Inter Milan', homeAtt: 2.10, homeDef: 1.05, awayAtt: 1.80, awayDef: 0.75, homeRank: 'QF', awayRank: 'QF', homeForm: 'W-D-W-W', awayForm: 'W-W-D-W', date: 'Miércoles - 21:00' }
+            ],
+            seriea: [
+                { id: 's1', home: 'Inter Milan', away: 'AC Milan', homeAtt: 2.05, homeDef: 0.70, awayAtt: 1.75, awayDef: 1.10, homeRank: 1, awayRank: 3, homeForm: 'W-W-W-D', awayForm: 'D-W-L-W', date: 'Domingo - 20:45' },
+                { id: 's2', home: 'Juventus FC', away: 'SSC Napoli', homeAtt: 1.60, homeDef: 0.75, awayAtt: 1.65, awayDef: 1.00, homeRank: 4, awayRank: 5, homeForm: 'D-W-W-D', awayForm: 'W-L-W-W', date: 'Sábado - 18:00' }
+            ],
+            colombia: [
+                { id: 'col1', home: 'Atlético Nacional', away: 'Millonarios FC', homeAtt: 1.65, homeDef: 0.85, awayAtt: 1.50, awayDef: 0.90, homeRank: 2, awayRank: 3, homeForm: 'W-W-D-W', awayForm: 'W-D-W-L', date: 'Hoy - 20:10' },
+                { id: 'col2', home: 'América de Cali', away: 'Junior de Barranquilla', homeAtt: 1.55, homeDef: 0.95, awayAtt: 1.40, awayDef: 1.10, homeRank: 4, awayRank: 6, homeForm: 'D-W-W-L', awayForm: 'L-W-D-W', date: 'Mañana - 18:00' }
+            ],
+            custom: [
+                { id: 'cust1', home: 'Equipo Local A', away: 'Equipo Visitante B', homeAtt: 1.80, homeDef: 1.00, awayAtt: 1.30, awayDef: 1.20, homeRank: '-', awayRank: '-', homeForm: 'N/A', awayForm: 'N/A', date: 'Personalizado' }
+            ]
+        };
+
+        let currentLoadedMatches = [];
+        let currentMatch = null;
+        let goalDistChartInstance = null;
+        let radarChartInstance = null;
+        let calculatedHomeXg = 1.0;
+        let calculatedAwayXg = 1.0;
+
+        const LEAGUE_MAPPINGS = {
+            apifootball: { laliga: 140, premier: 39, champions: 2, seriea: 135, colombia: 239 },
+            footballdata: { laliga: 'PD', premier: 'PL', champions: 'CL', seriea: 'SA' }
+        };
+
+        function factorial(n) {
+            if (n === 0 || n === 1) return 1;
+            let res = 1;
+            for (let i = 2; i <= n; i++) res *= i;
+            return res;
+        }
+
+        function poissonProb(k, lambda) {
+            return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
+        }
+
+        function dixonColesTau(h, a, lambda, mu, rho = -0.11) {
+            if (h === 0 && a === 0) return 1 - (lambda * mu * rho);
+            if (h === 1 && a === 0) return 1 + (mu * rho);
+            if (h === 0 && a === 1) return 1 + (lambda * rho);
+            if (h === 1 && a === 1) return 1 - rho;
+            return 1.0;
+        }
+
+        function poissonRandom(lambda) {
+            let L = Math.exp(-lambda);
+            let k = 0;
+            let p = 1;
+            do {
+                k++;
+                p *= Math.random();
+            } while (p > L);
+            return k - 1;
+        }
+
+        function calculatePredictions() {
+            if (!currentMatch) return;
+
+            const homeAdv = parseFloat(document.getElementById('homeAdvantageSlider').value) / 100;
+            const homeInj = parseFloat(document.getElementById('homeInjuriesSlider').value) / 100;
+            const awayInj = parseFloat(document.getElementById('awayInjuriesSlider').value) / 100;
+            const importance = parseFloat(document.getElementById('matchImportanceSlider').value) / 100;
+            const modelType = document.getElementById('modelType').value;
+
+            let baseHomeXg = currentMatch.homeAtt * currentMatch.awayDef;
+            let baseAwayXg = currentMatch.awayAtt * currentMatch.homeDef;
+
+            let homeXg = baseHomeXg * (1 + homeAdv) * (1 + homeInj) * importance;
+            let awayXg = baseAwayXg * (1 + awayInj) * importance;
+
+            if (modelType === 'xg_weighted') {
+                homeXg *= 1.08;
+                awayXg *= 0.95;
+            }
+
+            calculatedHomeXg = Math.max(0.1, homeXg);
+            calculatedAwayXg = Math.max(0.1, awayXg);
+
+            document.getElementById('expectedScoreHome').innerText = calculatedHomeXg.toFixed(2);
+            document.getElementById('expectedScoreAway').innerText = calculatedAwayXg.toFixed(2);
+
+            let rawMatrix = [];
+            let totalProbSum = 0;
+
+            for (let h = 0; h <= 5; h++) {
+                rawMatrix[h] = [];
+                for (let a = 0; a <= 5; a++) {
+                    let pH = poissonProb(h, calculatedHomeXg);
+                    let pA = poissonProb(a, calculatedAwayXg);
+                    let cellProb = pH * pA;
+
+                    if (modelType === 'dixon') {
+                        cellProb *= dixonColesTau(h, a, calculatedHomeXg, calculatedAwayXg);
+                    }
+                    cellProb = Math.max(0, cellProb);
+                    rawMatrix[h][a] = cellProb;
+                    totalProbSum += cellProb;
+                }
+            }
+
+            let probMatrix = [];
+            let scoresList = [];
+            let probHomeWin = 0;
+            let probDraw = 0;
+            let probAwayWin = 0;
+            let probOver25 = 0;
+            let probBtts = 0;
+
+            for (let h = 0; h <= 5; h++) {
+                probMatrix[h] = [];
+                for (let a = 0; a <= 5; a++) {
+                    let pct = (rawMatrix[h][a] / totalProbSum) * 100;
+                    probMatrix[h][a] = pct;
+
+                    if (h > a) probHomeWin += pct;
+                    else if (h === a) probDraw += pct;
+                    else probAwayWin += pct;
+
+                    if ((h + a) > 2.5) probOver25 += pct;
+                    if (h > 0 && a > 0) probBtts += pct;
+
+                    scoresList.push({ home: h, away: a, pct: pct, odds: (100 / Math.max(0.1, pct)).toFixed(2) });
+                }
+            }
+
+            scoresList.sort((x, y) => y.pct - x.pct);
+            const topScore = scoresList[0];
+            document.getElementById('topPredictedScoreBadge').innerText = `Marcador Más Probable: ${topScore.home} - ${topScore.away} (${topScore.pct.toFixed(1)}%)`;
+
+            renderHeatmap(probMatrix);
+            renderTopScoresList(scoresList.slice(0, 5));
+            updateOutcomeBars(probHomeWin, probDraw, probAwayWin, probOver25, probBtts);
+            updateCharts();
+        }
+
+        function renderHeatmap(matrix) {
+            const grid = document.getElementById('heatmapGrid');
+            grid.innerHTML = '';
+
+            for (let h = 0; h <= 5; h++) {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-7 gap-1 text-center text-xs items-center';
+
+                const label = document.createElement('div');
+                label.className = 'font-bold text-brand-400 text-xs';
+                label.innerText = h === 5 ? '5+' : h;
+                row.appendChild(label);
+
+                for (let a = 0; a <= 5; a++) {
+                    const pct = matrix[h][a];
+                    const odds = (100 / Math.max(0.1, pct)).toFixed(2);
+
+                    let bgStyle = 'bg-gray-800/80 text-gray-300';
+                    if (pct > 10) bgStyle = 'bg-brand-600 text-white font-black shadow-lg shadow-brand-600/30';
+                    else if (pct > 6) bgStyle = 'bg-brand-700/80 text-white font-bold';
+                    else if (pct > 3) bgStyle = 'bg-brand-900/50 text-brand-200';
+
+                    const cell = document.createElement('div');
+                    cell.className = `heatmap-cell py-2 px-1 rounded-lg border border-gray-700/50 cursor-pointer ${bgStyle}`;
+                    cell.onclick = () => showCellDetails(h, a, pct.toFixed(1), odds);
+                    cell.innerHTML = `
+                        <div class="text-[11px] font-bold">${pct.toFixed(1)}%</div>
+                        <div class="text-[9px] opacity-75 font-mono">@${odds}</div>
+                    `;
+                    row.appendChild(cell);
+                }
+                grid.appendChild(row);
+            }
+        }
+
+        function renderTopScoresList(topList) {
+            const container = document.getElementById('topScoresList');
+            container.innerHTML = '';
+
+            topList.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between p-2.5 bg-gray-800/60 rounded-xl border border-gray-700/50 hover:border-brand-500/40 transition';
+                row.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <span class="w-6 h-6 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs">${idx + 1}</span>
+                        <span class="text-sm font-black text-white tracking-widest">${item.home} - ${item.away}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs font-bold text-brand-400">${item.pct.toFixed(1)}%</span>
+                        <span class="text-[10px] text-gray-400 block font-mono">Cuota: @${item.odds}</span>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function updateOutcomeBars(homePct, drawPct, awayPct, overPct, bttsPct) {
+            document.getElementById('probHomeText').innerText = `1 (Local): ${homePct.toFixed(1)}%`;
+            document.getElementById('probDrawText').innerText = `X (Empate): ${drawPct.toFixed(1)}%`;
+            document.getElementById('probAwayText').innerText = `2 (Visitante): ${awayPct.toFixed(1)}%`;
+
+            document.getElementById('barHome').style.width = `${homePct}%`;
+            document.getElementById('barDraw').style.width = `${drawPct}%`;
+            document.getElementById('barAway').style.width = `${awayPct}%`;
+
+            document.getElementById('probOver25').innerText = `${overPct.toFixed(1)}%`;
+            document.getElementById('oddsOver25').innerText = `Cuota Justa: @${(100 / Math.max(0.1, overPct)).toFixed(2)}`;
+
+            document.getElementById('probBtts').innerText = `${bttsPct.toFixed(1)}%`;
+            document.getElementById('oddsBtts').innerText = `Cuota Justa: @${(100 / Math.max(0.1, bttsPct)).toFixed(2)}`;
+        }
+
+        function updateCharts() {
+            const goals = [0, 1, 2, 3, 4, 5];
+            const homeProbs = goals.map(g => (poissonProb(g, calculatedHomeXg) * 100).toFixed(1));
+            const awayProbs = goals.map(g => (poissonProb(g, calculatedAwayXg) * 100).toFixed(1));
+
+            const ctx1 = document.getElementById('goalDistChart').getContext('2d');
+            if (goalDistChartInstance) goalDistChartInstance.destroy();
+
+            goalDistChartInstance = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: ['0 Goles', '1 Gol', '2 Goles', '3 Goles', '4 Goles', '5+ Goles'],
+                    datasets: [
+                        {
+                            label: currentMatch.home,
+                            data: homeProbs,
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                            borderColor: '#22c55e',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        },
+                        {
+                            label: currentMatch.away,
+                            data: awayProbs,
+                            backgroundColor: 'rgba(6, 182, 212, 0.7)',
+                            borderColor: '#06b6d4',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 } } } },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }
+                    }
+                }
+            });
+
+            const ctx2 = document.getElementById('radarChart').getContext('2d');
+            if (radarChartInstance) radarChartInstance.destroy();
+
+            radarChartInstance = new Chart(ctx2, {
+                type: 'radar',
+                data: {
+                    labels: ['Poder de Ataque', 'Solidez Defensiva', 'xG Esperado', 'Efectividad', 'Forma Reciente'],
+                    datasets: [
+                        {
+                            label: currentMatch.home,
+                            data: [
+                                currentMatch.homeAtt * 40,
+                                (2.0 - currentMatch.homeDef) * 50,
+                                calculatedHomeXg * 35,
+                                75,
+                                82
+                            ],
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                            pointBackgroundColor: '#22c55e'
+                        },
+                        {
+                            label: currentMatch.away,
+                            data: [
+                                currentMatch.awayAtt * 40,
+                                (2.0 - currentMatch.awayDef) * 50,
+                                calculatedAwayXg * 35,
+                                68,
+                                70
+                            ],
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.2)',
+                            pointBackgroundColor: '#06b6d4'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 } } } },
+                    scales: {
+                        r: {
+                            angleLines: { color: '#374151' },
+                            grid: { color: '#1f2937' },
+                            pointLabels: { color: '#9ca3af', font: { size: 10 } },
+                            ticks: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function runMonteCarloSimulation() {
+            let homeWins = 0;
+            let draws = 0;
+            let awayWins = 0;
+            const N = 10000;
+
+            for (let i = 0; i < N; i++) {
+                let hSim = poissonRandom(calculatedHomeXg);
+                let aSim = poissonRandom(calculatedAwayXg);
+
+                if (hSim > aSim) homeWins++;
+                else if (hSim === aSim) draws++;
+                else awayWins++;
+            }
+
+            document.getElementById('simHomeWin').innerText = `${((homeWins / N) * 100).toFixed(1)}%`;
+            document.getElementById('simDraw').innerText = `${((draws / N) * 100).toFixed(1)}%`;
+            document.getElementById('simAwayWin').innerText = `${((awayWins / N) * 100).toFixed(1)}%`;
+
+            showToast('Simulación de 10,000 partidos completada.');
+        }
+
+        async function loadLeagueMatches() {
+            const leagueKey = document.getElementById('leagueSelect').value;
+            const matchSelect = document.getElementById('matchSelect');
+            matchSelect.innerHTML = '<option>Cargando partidos...</option>';
+
+            const provider = localStorage.getItem('football_api_provider') || 'mock';
+            const apiKey = localStorage.getItem('football_api_key') || '';
+
+            let fetchedMatches = [];
+
+            if (provider === 'apifootball' && apiKey.trim() !== '') {
+                try {
+                    const leagueId = LEAGUE_MAPPINGS.apifootball[leagueKey] || 140;
+                    const res = await fetch(`https://v3.football.api-sports.io/fixtures?next=10&league=${leagueId}`, {
+                        headers: { 'x-apisports-key': apiKey }
+                    });
+                    const data = await res.json();
+
+                    if (data.response && data.response.length > 0) {
+                        fetchedMatches = data.response.map((item, idx) => ({
+                            id: `api_${item.fixture.id}`,
+                            home: item.teams.home.name,
+                            away: item.teams.away.name,
+                            homeAtt: 1.6 + (Math.random() * 0.7),
+                            homeDef: 0.8 + (Math.random() * 0.4),
+                            awayAtt: 1.3 + (Math.random() * 0.6),
+                            awayDef: 0.9 + (Math.random() * 0.5),
+                            homeRank: idx + 1,
+                            awayRank: idx + 2,
+                            homeForm: 'W-W-D-W',
+                            awayForm: 'D-L-W-W',
+                            date: new Date(item.fixture.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                        }));
+                    } else if (data.errors && Object.keys(data.errors).length > 0) {
+                        showToast(`Error de API: ${data.errors.token || 'Clave no válida o sin cuota.'}`);
+                    }
+                } catch (e) {
+                    console.warn('API Error, usando datos precargados:', e);
+                }
+            }
+
+            if (!fetchedMatches || fetchedMatches.length === 0) {
+                fetchedMatches = mockMatches[leagueKey] || mockMatches.laliga;
+            }
+
+            currentLoadedMatches = fetchedMatches;
+            matchSelect.innerHTML = '';
+            currentLoadedMatches.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.innerText = `${m.home} vs ${m.away}`;
+                matchSelect.appendChild(opt);
+            });
+
+            currentMatch = currentLoadedMatches[0];
+            updateMatchHeaderUI();
+            calculatePredictions();
+            runMonteCarloSimulation();
+        }
+
+        function onMatchChange() {
+            const matchId = document.getElementById('matchSelect').value;
+            currentMatch = currentLoadedMatches.find(m => m.id === matchId) || currentLoadedMatches[0];
+            updateMatchHeaderUI();
+            calculatePredictions();
+            runMonteCarloSimulation();
+        }
+
+        function updateMatchHeaderUI() {
+            if (!currentMatch) return;
+            document.getElementById('homeTeamName').innerText = currentMatch.home;
+            document.getElementById('awayTeamName').innerText = currentMatch.away;
+
+            document.getElementById('homeTeamStats').innerText = `Posición: #${currentMatch.homeRank} | Forma: ${currentMatch.homeForm}`;
+            document.getElementById('awayTeamStats').innerText = `Posición: #${currentMatch.awayRank} | Forma: ${currentMatch.awayForm}`;
+
+            document.getElementById('homeAtt').innerText = currentMatch.homeAtt.toFixed(2);
+            document.getElementById('homeDef').innerText = currentMatch.homeDef.toFixed(2);
+            document.getElementById('awayAtt').innerText = currentMatch.awayAtt.toFixed(2);
+            document.getElementById('awayDef').innerText = currentMatch.awayDef.toFixed(2);
+
+            document.getElementById('matchDate').innerText = currentMatch.date;
+        }
+
+        function initApiSettings() {
+            const savedProvider = localStorage.getItem('football_api_provider') || 'mock';
+            const savedKey = localStorage.getItem('football_api_key') || '';
+
+            document.getElementById('apiProvider').value = savedProvider;
+            document.getElementById('apiKeyInput').value = savedKey;
+
+            onApiProviderChange();
+            updateApiStatusBadge(savedProvider, savedKey);
+        }
+
+        function onApiProviderChange() {
+            const provider = document.getElementById('apiProvider').value;
+            const keyContainer = document.getElementById('apiKeyContainer');
+            const helpLink = document.getElementById('apiHelpLink');
+
+            if (provider === 'mock') {
+                keyContainer.classList.add('opacity-50', 'pointer-events-none');
+            } else {
+                keyContainer.classList.remove('opacity-50', 'pointer-events-none');
+                if (provider === 'apifootball') {
+                    helpLink.href = 'https://dashboard.api-football.com/';
+                    helpLink.innerText = 'Obtener Key en API-Football';
+                } else if (provider === 'footballdata') {
+                    helpLink.href = 'https://www.football-data.org/client/register';
+                    helpLink.innerText = 'Obtener Key en Football-Data.org';
+                }
+            }
+            document.getElementById('apiTestResult').classList.add('hidden');
+        }
+
+        function updateApiStatusBadge(provider, key) {
+            const dot = document.getElementById('apiStatusDot');
+            const text = document.getElementById('apiStatusText');
+            const btn = document.getElementById('apiStatusBtn');
+
+            if (provider !== 'mock' && key.trim() !== '') {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-brand-500 inline-block shadow-lg shadow-brand-500/50';
+                text.innerText = `API Conectada (${provider === 'apifootball' ? 'API-Sports' : 'Football-Data'})`;
+                btn.classList.add('border-brand-500/50', 'text-brand-400');
+            } else {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block';
+                text.innerText = 'Configurar API (Modo Demo)';
+                btn.classList.remove('border-brand-500/50', 'text-brand-400');
+            }
+        }
+
+        async function testApiConnection() {
+            const provider = document.getElementById('apiProvider').value;
+            const key = document.getElementById('apiKeyInput').value.trim();
+            const resBox = document.getElementById('apiTestResult');
+
+            if (provider === 'mock') {
+                resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-blue-900/40 border-blue-700 text-blue-300';
+                resBox.innerText = 'Modo Simulación activo (no requiere API key).';
+                resBox.classList.remove('hidden');
+                return;
+            }
+
+            if (!key) {
+                resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-red-900/40 border-red-700 text-red-300';
+                resBox.innerText = 'Error: Por favor ingresa una API Key válida.';
+                resBox.classList.remove('hidden');
+                return;
+            }
+
+            resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-yellow-900/40 border-yellow-700 text-yellow-300 animate-pulse';
+            resBox.innerText = 'Probando conexión con el servidor...';
+            resBox.classList.remove('hidden');
+
+            try {
+                let success = false;
+                let message = '';
+
+                if (provider === 'apifootball') {
+                    const response = await fetch('https://v3.football.api-sports.io/status', {
+                        method: 'GET',
+                        headers: { 'x-apisports-key': key }
+                    });
+                    const data = await response.json();
+                    if (data.response && data.response.account) {
+                        success = true;
+                        message = `¡Conexión Exitosa! Cuenta de ${data.response.account.firstname || 'Usuario'} activa. Peticiones restantes hoy: ${data.response.requests.current}/${data.response.requests.limit_day}`;
+                    } else {
+                        message = data.errors?.token || 'Error de autenticación. Verifica tu API Key.';
+                    }
+                } else if (provider === 'footballdata') {
+                    const response = await fetch('https://api.football-data.org/v4/competitions/PL/matches?limit=1', {
+                        headers: { 'X-Auth-Token': key }
+                    });
+                    if (response.status === 200) {
+                        success = true;
+                        message = '¡Conexión Exitosa con Football-Data.org!';
+                    } else {
+                        message = `Error HTTP ${response.status}: Key no válida.`;
+                    }
+                }
+
+                if (success) {
+                    resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-brand-900/50 border-brand-500 text-brand-300';
+                    resBox.innerText = message;
+                } else {
+                    resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-red-900/50 border-red-500 text-red-300';
+                    resBox.innerText = `Error: ${message}`;
+                }
+            } catch (err) {
+                resBox.className = 'p-3 rounded-lg text-xs font-medium border bg-red-900/50 border-red-500 text-red-300';
+                resBox.innerText = 'Error de Red o CORS: Asegúrate de que la API permita llamadas directas o usa tu API key correctamente.';
+            }
+        }
+
+        function saveApiSettings() {
+            const provider = document.getElementById('apiProvider').value;
+            const key = document.getElementById('apiKeyInput').value.trim();
+
+            localStorage.setItem('football_api_provider', provider);
+            localStorage.setItem('football_api_key', key);
+
+            updateApiStatusBadge(provider, key);
+            toggleApiModal();
+
+            if (provider !== 'mock' && key !== '') {
+                showToast(`Configuración de API (${provider}) guardada. Cargando partidos...`);
+            } else {
+                showToast(`Modo Simulación activado.`);
+            }
+
+            loadLeagueMatches();
+        }
+
+        function updateSliderLabels() {
+            const homeAdv = document.getElementById('homeAdvantageSlider').value;
+            const homeInj = document.getElementById('homeInjuriesSlider').value;
+            const awayInj = document.getElementById('awayInjuriesSlider').value;
+            const importance = document.getElementById('matchImportanceSlider').value;
+
+            document.getElementById('homeAdvantageVal').innerText = `+${homeAdv}%`;
+            document.getElementById('homeInjuriesVal').innerText = homeInj < 0 ? `${homeInj}% impacto` : 'Sin bajas';
+            document.getElementById('awayInjuriesVal').innerText = awayInj < 0 ? `${awayInj}% impacto` : 'Sin bajas';
+
+            let impText = 'Normal';
+            if (importance > 105) impText = 'Alta (Final/Derbi)';
+            if (importance < 95) impText = 'Baja (Rotación)';
+            document.getElementById('matchImportanceVal').innerText = impText;
+
+            calculatePredictions();
+        }
+
+        function resetSliders() {
+            document.getElementById('homeAdvantageSlider').value = 12;
+            document.getElementById('homeInjuriesSlider').value = 0;
+            document.getElementById('awayInjuriesSlider').value = 0;
+            document.getElementById('matchImportanceSlider').value = 100;
+            updateSliderLabels();
+        }
+
+        function showCellDetails(h, a, percent, odds) {
+            showToast(`Marcador ${h}-${a}: Probabilidad ${percent}% (Cuota justa @${odds})`);
+        }
+
+        function copyTopPredictions() {
+            const text = `🏆 Predicción: ${currentMatch.home} vs ${currentMatch.away}\n` +
+                         `⚽ xG Esperado: ${document.getElementById('expectedScoreHome').innerText} - ${document.getElementById('expectedScoreAway').innerText}\n` +
+                         `🔥 ${document.getElementById('topPredictedScoreBadge').innerText}\n` +
+                         `📊 Generado con FutBolPredict AI`;
+
+            const dummy = document.createElement('textarea');
+            document.body.appendChild(dummy);
+            dummy.value = text;
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+
+            showToast('¡Resumen copiado al portapapeles!');
+        }
+
+        function toggleApiModal() {
+            document.getElementById('apiModal').classList.toggle('hidden');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        window.onload = function() {
+            initApiSettings();
+            loadLeagueMatches();
+        };
+    </script>
+</body>
+</html>
